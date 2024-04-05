@@ -48,6 +48,7 @@ class ols_simp:
     out=basic_stats(smf.ols(formula=self.formula, data=self.data,missing="drop").fit())
    
     if len(self.pre)>0:
+      #print(out.params)
       out.pc=100*(out.params[self.case]/self.data[self.pre].mean())
     return out
 
@@ -121,20 +122,24 @@ def table_means_ext(df, show=[], groupby='Case', cols=[], rows=[], var_names=[],
         for column in show:
         # itentify categorical
         #if (~np.isnan(pd.to_numeric(list(filter(lambda v: v==v, df[column])), errors='coerce')).any()):
-            ids_case = df_c[df_c[groupby]==group].index
-            ids_ctr = df_c.loc[ids_case,'matched_eid']
+            ids_case = df_c.loc[df_c[groupby]==group,column].notna().index
+            ids_ctr=df_c.loc[ids_case,'matched_eid'].dropna().values
+            ids_ctr=df_c.loc[ids_ctr,column].dropna().index
+            ids_case=df_c.loc[ids_ctr,'matched_eid']
+              
+            #ids_ctr = df_c.loc[ids_case,'matched_eid'].dropna().values
             
             ids = np.concatenate([ids_case,ids_ctr])
             
             if not(is_numeric_dtype(df[column])) or is_bool_dtype(df[column]):
                     contingency=pd.crosstab(index=df_c.loc[ids,groupby],columns=df_c.loc[ids,column])
                     chi2=chi2_contingency(contingency)
-                    stat_results[group][column]={'statistic':chi2.statistic, 'pvalue':chi2.pvalue}
+                    stat_results[group][column]={'statistic':chi2.statistic, 'pvalue':chi2.pvalue, 'df':len(ids_case)}
             else:
                     # add the output to the dictionary 
                     
                     out=stats.ttest_rel(df_c.loc[ids_case,column],df_c.loc[ids_ctr,column],nan_policy='omit')
-                    stat_results[group][column] = {'statistic':out.statistic, 'pvalue':out.pvalue}
+                    stat_results[group][column] = {'statistic':out.statistic, 'pvalue':out.pvalue, 'df':len(ids_case)}
                  
     
     idx = pd.IndexSlice
@@ -153,21 +158,24 @@ def table_means_ext(df, show=[], groupby='Case', cols=[], rows=[], var_names=[],
     
     for column in show:
         if not(is_numeric_dtype(df[column])) :
-            #df_desc.loc[column,all_keys] = (df_desc_full[column]['top'].astype(str)+":"+df_desc_full[column]['freq'].astype(str))
             df_desc.loc[column,all_keys] = df_desc_full[column]['freq'].astype(str)
+            
         # flipping to least common as often most interpretable number for bools
         elif is_bool_dtype(df[column]):
             #df_desc.loc[column,all_keys] = ((~df_desc_full[column]['top']).astype(str)+":"+(df_desc_full[column]['count']-df_desc_full[column]['freq']).astype(str))
             df_desc.loc[column,all_keys] = (df_desc_full[column]['count']-df_desc_full[column]['freq']).astype(str)
+        
     
     for group in statkeys:
         results_df = pd.DataFrame.from_dict(stat_results[group],orient='Index')
-        results_df.columns = ['statistic','pvalue']
+        results_df.columns = ['statistic','pvalue','df']
 
         df_desc.loc[:,'p value (' + group + ')']=results_df.pvalue
+
+        df_desc.loc[:,'count (' + group + ')']=(results_df.df.astype('string'))
     
     df_desc=df_desc.drop('matched_eid',axis=0)
-    df_desc=df_desc
+ 
     df_desc.index=var_names
     
     df_desc.columns.name = None
