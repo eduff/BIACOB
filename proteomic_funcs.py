@@ -45,11 +45,37 @@ class ols_simp:
     self.case=case
 
   def fit(self):
-    out=basic_stats(smf.ols(formula=self.formula, data=self.data,missing="drop").fit())
-   
+    fit=(smf.ols(formula=self.formula, data=self.data,missing="drop").fit())
+    out=basic_stats(fit)
+    sd_x=fit.model.data.exog.std(axis=0)
+    sd_y=fit.model.data.endog.std(axis=0)
+    conf_int = fit.conf_int()
+    coefficients=fit.params
+    beta_coefficients = pd.Series()
+    conf_int_norm=conf_int.copy()
+    
+
+    # Iterate through independent variables and calculate beta coefficients
+    for col, i in enumerate(fit.model.data.xnames):
+        beta = coefficients[i] * (sd_x[col] / sd_y)
+        beta_coefficients[i]= beta
+        
+        conf_int_norm.loc[i,[0,1]] = conf_int.loc[i,[0,1]] * (sd_x[col] / sd_y)
+    out.params_norm=beta_coefficients
+    out.conf_int_norm=conf_int_norm
+    # Print beta coefficients
+    #for var, beta in beta_coefficients:
+    #print(f' {var}: {beta}')
+    
     if len(self.pre)>0:
       #print(out.params)
-      out.pc=100*(out.params[self.case]/self.data[self.pre].mean())
+        if "'" in self.case:
+            case=re.search("'.*'",self.case)[0][1:-1]
+        else:
+            case=self.case
+        
+        out.ve = (out.params[self.case]*np.var(self.data[case]))/np.var(self.data[self.pre]) 
+        out.pc=100*(out.params[self.case]/self.data[self.pre].mean())
     return out
 
 
@@ -122,7 +148,7 @@ def table_means_ext(df, show=[], groupby='Case', cols=[], rows=[], var_names=[],
         for column in show:
         # itentify categorical
         #if (~np.isnan(pd.to_numeric(list(filter(lambda v: v==v, df[column])), errors='coerce')).any()):
-            ids_case = df_c.loc[df_c[groupby]==group,column].notna().index
+            ids_case = df_c.loc[df_c[groupby]==group,column].dropna().index
             ids_ctr=df_c.loc[ids_case,'matched_eid'].dropna().values
             ids_ctr=df_c.loc[ids_ctr,column].dropna().index
             ids_case=df_c.loc[ids_ctr,'matched_eid']
@@ -148,24 +174,25 @@ def table_means_ext(df, show=[], groupby='Case', cols=[], rows=[], var_names=[],
     df_desc = df_desc_full.loc[idx[:],idx[:,["mean", "std"]]].T
     df_desc.loc[idx[:,["mean"]],idx[:]] = df_desc.loc[idx[:,["mean"]],idx[:]
                                                ].applymap(
-                                               lambda x: "{:.4f}".format(x))
+                                               lambda x: "{:.2f}".format(x))
     df_desc.loc[idx[:,["std"]],idx[:]] = df_desc.loc[idx[:,["std"]],idx[:]
                                                ].applymap(
-                                               lambda x: " ("+"{:.4f}".format(x)+")")
+                                               lambda x: " ("+"{:.2f}".format(x)+")")
 
     df_desc.loc[idx[:,["mean"]],idx[:]] = df_desc.loc[idx[:,["mean"]],idx[:]].values+df_desc.loc[idx[:,["std"]],idx[:]].values
     df_desc=df_desc.loc[idx[:,["mean"]],idx[:]].droplevel(1)
     
     for column in show:
-        if not(is_numeric_dtype(df[column])) :
-            df_desc.loc[column,all_keys] = df_desc_full[column]['freq'].astype(str)
-            
-        # flipping to least common as often most interpretable number for bools
-        elif is_bool_dtype(df[column]):
+         # flipping to least common as often most interpretable number for bools       
+    
+        if is_bool_dtype(df[column]):
             #df_desc.loc[column,all_keys] = ((~df_desc_full[column]['top']).astype(str)+":"+(df_desc_full[column]['count']-df_desc_full[column]['freq']).astype(str))
             df_desc.loc[column,all_keys] = (df_desc_full[column]['count']-df_desc_full[column]['freq']).astype(str)
-        
-    
+         
+        elif not(is_numeric_dtype(df[column])) :
+            df_desc.loc[column,all_keys] = df_desc_full[column]['freq'].astype(str)
+            
+       
     for group in statkeys:
         results_df = pd.DataFrame.from_dict(stat_results[group],orient='Index')
         results_df.columns = ['statistic','pvalue','df']
@@ -180,7 +207,7 @@ def table_means_ext(df, show=[], groupby='Case', cols=[], rows=[], var_names=[],
     
     df_desc.columns.name = None
 
-    return df_desc
+    return df_desc#, df_desc_full
 
 # remove outliers from data 
 def remove_outliers(data, mult=8, repl=np.nan, axis=0, demean=False, pos=False, log=False):
@@ -359,7 +386,7 @@ def sizeof_fmt(num, suffix='B'):
     return "%.1f %s%s" % (num, 'Yi', suffix)
 
 # print a full table
-def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars=[], rownames=[], colnames=[], diff_models=False, FPR='row', alpha=0.05, rem_txt=-6, returndata=False,beta_name_add=''):
+def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars=[], rownames=[], colnames=[], diff_models=False, FPR='row', alpha=0.05, rem_txt=-6, returndata=False,beta_name_add='',beta_name_only=[]):
     """
     Generate a table of model results for proteomics data.
 
@@ -395,44 +422,75 @@ def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars
         
     table2=pd.DataFrame({'Assay':rownames})
     table2=table2.set_index('Assay')
+    results_tables={}
+
+    
     pvals=np.empty((len(rownames),len(colnames)))
     pvals_corr=np.empty((len(rownames),len(colnames)))
     sigs=np.empty((len(rownames),len(colnames)))
     betas=np.empty((len(rownames),len(colnames)))
-             
+    betas_norm=np.empty((len(rownames),len(colnames)))
+    conf_int_l=np.empty((len(rownames),len(colnames)))         
+    conf_int_l_norm=np.empty((len(rownames),len(colnames)))
+    conf_int_u=np.empty((len(rownames),len(colnames)))         
+    conf_int_u_norm=np.empty((len(rownames),len(colnames))) 
+    pcs=np.empty((len(rownames),len(colnames)))
+    resultstables={}
     
-    for row in range(len(assays)): 
+    for col in range(len(vars_show)):
+        
+        resultstable=pd.DataFrame({'Assay':rownames})
+        resultstable=resultstable.set_index('Assay',drop=False)
 
-        for col in range(len(vars_show)):
+        for row in range(len(assays)): 
+        
             if diff_models==True: 
                 name=assays[row]+'_'+vars_show[col]+'_'+model_names[0]
             elif diff_models==2:
                 name=assays[row]+model_names[0]
-                print(name)
             else:
                 name=assays[row]+model_names[0]
 
             ll=list(outputs[name].pvalues.index)
             # show n for model. shows final model if diff_model = True
-            
-            table2.loc[rownames[row],'n']=str(int(outputs[name].df_model + outputs[name].df_resid))
+            n=str(int(outputs[name].df_model + outputs[name].df_resid))
+            table2.loc[rownames[row],'n']=n
+            resultstable.loc[rownames[row],'n']=n
         
-        
-            #print(name,vars_show[col])
-            indices = [i for i, s in enumerate(ll) if ((vars_show[col] in s) & (beta_name_add in s))]
+     
+            if beta_name_only:
+                indices = [i for i, s in enumerate(ll) if (beta_name_only in s)]
+            else:  
+                indices = [i for i, s in enumerate(ll) if ((vars_show[col] in s)&(beta_name_add in s))]
+                #print( [s for i, s in enumerate(ll)]  )
+                #print(vars_show[col] )
             #if len(indices)>1:
             #    [ print(ll[i]) for i in indices]
+            betas[row,col]=(outputs[name].params[indices[0]])
+            resultstable.loc[rownames[row],'betas']=betas[row,col]
+            betas[row,col]=(outputs[name].params_norm[indices[0]])
+            resultstable.loc[rownames[row],'betas_norm']=betas[row,col]
+
+            pcs[row,col]=(outputs[name].pc)
+            resultstable.loc[rownames[row],'pc']=pcs[row,col]            
             
-            betas[row,col]=(outputs[name].params[indices[0]])    
+            resultstable.loc[rownames[row],'ci_l']=(outputs[name].conf_int.iloc[indices[0],0]) 
+            resultstable.loc[rownames[row],'ci_l_norm']=(outputs[name].conf_int_norm.iloc[indices[0],0])
+            resultstable.loc[rownames[row],'ci_u']=(outputs[name].conf_int.iloc[indices[0],1])   
+            resultstable.loc[rownames[row],'ci_u_norm']=(outputs[name].conf_int_norm.iloc[indices[0],1])
             pvals[row,col]=(outputs[name].pvalues[indices[0]])
+            
             # check if 1-sided
             
             if (beta_dirs[row]*beta_vars[col])==(np.sign(betas[row,col])):
                 pvals[row,col]=pvals[row,col]/2
 
             elif  (beta_dirs[row]*beta_vars[col])==(-np.sign(betas[row,col])): 
-
                 pvals[row,col]=0.5+(1-pvals[row,col])/2
+                
+            resultstable.loc[rownames[row],'pvals']= pvals[row,col]
+        
+        resultstables[vars_show[col]]=resultstable
     
     if FPR=='row':
         for row in range(len(assays)):
@@ -444,7 +502,6 @@ def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars
         (sigs,pvals_corr) = statsmodels.stats.multitest.fdrcorrection(pvals.flatten(),alpha=alpha,method='indep')
         sigs=sigs.reshape(pvals.shape)
 
-
     
     for col in range(len(vars_show)):
         for row in range(len(assays)):
@@ -455,8 +512,10 @@ def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars
                 table2.loc[rownames[row],colnames[col]]= (beta+' (p=' + '{0:.3f}'.format(pvals[row,col]) + '*)') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
             else:
                 table2.loc[rownames[row],colnames[col]]= (beta+' (p=' + '{0:.3f})'.format(pvals[row,col]) + ' ') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
+                
+    
     if returndata:
-        return(table2,pvals,pvals_corr,sigs,betas)
+        return(table2,pvals,pvals_corr,sigs,beta,resultstables)
     else:
         return(table2)
 
