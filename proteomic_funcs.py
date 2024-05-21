@@ -474,7 +474,7 @@ def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars
             pcs[row,col]=(outputs[name].pc)
             resultstable.loc[rownames[row],'pc']=pcs[row,col]            
             
-            resultstable.loc[rownames[row],'ci_l']=(outputs[name].conf_int.iloc[indices[0],0]) 
+            resultstable.loc[rownames[row],'ci_l']=(outputs[name].conf_int.iloc[indices[0],0])
             resultstable.loc[rownames[row],'ci_l_norm']=(outputs[name].conf_int_norm.iloc[indices[0],0])
             resultstable.loc[rownames[row],'ci_u']=(outputs[name].conf_int.iloc[indices[0],1])   
             resultstable.loc[rownames[row],'ci_u_norm']=(outputs[name].conf_int_norm.iloc[indices[0],1])
@@ -505,17 +505,17 @@ def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars
     
     for col in range(len(vars_show)):
         for row in range(len(assays)):
-            beta= (' ' + '{0:.4f}'.format(betas[row,col]) ) # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
+            beta_txt= (' ' + '{0:.4f}'.format(betas[row,col]) ) # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
             if (sigs[row,col]==1) :
-                table2.loc[rownames[row],colnames[col]]= (beta+' (p=' + '{0:.3f}'.format(pvals[row,col]) + '**)') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
+                table2.loc[rownames[row],colnames[col]]= (beta_txt+' (p=' + '{0:.3f}'.format(pvals[row,col]) + '**)') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
             elif (pvals[row,col]<0.05):
-                table2.loc[rownames[row],colnames[col]]= (beta+' (p=' + '{0:.3f}'.format(pvals[row,col]) + '*)') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
+                table2.loc[rownames[row],colnames[col]]= (beta_txt+' (p=' + '{0:.3f}'.format(pvals[row,col]) + '*)') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
             else:
-                table2.loc[rownames[row],colnames[col]]= (beta+' (p=' + '{0:.3f})'.format(pvals[row,col]) + ' ') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
+                table2.loc[rownames[row],colnames[col]]= (beta_txt+' (p=' + '{0:.3f})'.format(pvals[row,col]) + ' ') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
                 
     
     if returndata:
-        return(table2,pvals,pvals_corr,sigs,beta,resultstables)
+        return(table2,pvals,pvals_corr,sigs,betas,resultstables)
     else:
         return(table2)
 
