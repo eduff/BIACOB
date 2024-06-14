@@ -187,10 +187,17 @@ def table_means_ext(df, show=[], groupby='Case', cols=[], rows=[], var_names=[],
     
         if is_bool_dtype(df[column]):
             #df_desc.loc[column,all_keys] = ((~df_desc_full[column]['top']).astype(str)+":"+(df_desc_full[column]['count']-df_desc_full[column]['freq']).astype(str))
-            df_desc.loc[column,all_keys] = (df_desc_full[column]['count']-df_desc_full[column]['freq']).astype(str)
-         
+            #df_desc.loc[column,all_keys] = (df_desc_full[column]['count']-df_desc_full[column]['freq']).astype(str)
+            df_desc.loc[column,all_keys] = df_c.groupby(groupby)[column].sum().astype(str)
+            
+            
         elif not(is_numeric_dtype(df[column])) :
-            df_desc.loc[column,all_keys] = df_desc_full[column]['freq'].astype(str)
+            #df_desc.loc[column,all_keys] = df_desc_full[column]['freq'].astype(str)
+            df_desc.loc[column,all_keys] = (df_desc_full[column]['count']-df_desc_full[column]['freq']).astype(str)
+            if bool(df[column].value_counts().index[0]):
+                df_desc.loc[column,all_keys] = (df_desc_full[column]['freq']).astype(str)
+                
+         
             
        
     for group in statkeys:
@@ -386,7 +393,7 @@ def sizeof_fmt(num, suffix='B'):
     return "%.1f %s%s" % (num, 'Yi', suffix)
 
 # print a full table
-def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars=[], rownames=[], colnames=[], diff_models=False, FPR='row', alpha=0.05, rem_txt=-6, returndata=False,beta_name_add='',beta_name_only=[]):
+def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars=[], rownames=[], colnames=[], diff_models=False, FPR='row', alpha=0.05, rem_txt=-6, returndata=False,beta_name_add='',beta_name_only=[],show_norms=True):
     """
     Generate a table of model results for proteomics data.
 
@@ -461,15 +468,17 @@ def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars
             if beta_name_only:
                 indices = [i for i, s in enumerate(ll) if (beta_name_only in s)]
             else:  
-                indices = [i for i, s in enumerate(ll) if ((vars_show[col] in s)&(beta_name_add in s))]
-                #print( [s for i, s in enumerate(ll)]  )
+                indices = [i for i, s in enumerate(ll) if ((vars_show[col] in s)) &  ((beta_name_add in s))]
+
+            #print( [s for i, s in enumerate(ll)]  )
                 #print(vars_show[col] )
             #if len(indices)>1:
             #    [ print(ll[i]) for i in indices]
+            
             betas[row,col]=(outputs[name].params[indices[0]])
             resultstable.loc[rownames[row],'betas']=betas[row,col]
-            betas[row,col]=(outputs[name].params_norm[indices[0]])
-            resultstable.loc[rownames[row],'betas_norm']=betas[row,col]
+            betas_norm[row,col]=(outputs[name].params_norm[indices[0]])
+            resultstable.loc[rownames[row],'betas_norm']=betas_norm[row,col]
 
             pcs[row,col]=(outputs[name].pc)
             resultstable.loc[rownames[row],'pc']=pcs[row,col]            
@@ -502,7 +511,9 @@ def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars
         (sigs,pvals_corr) = statsmodels.stats.multitest.fdrcorrection(pvals.flatten(),alpha=alpha,method='indep')
         sigs=sigs.reshape(pvals.shape)
 
-    
+    if show_norms:
+        betas=betas_norm
+        
     for col in range(len(vars_show)):
         for row in range(len(assays)):
             beta_txt= (' ' + '{0:.4f}'.format(betas[row,col]) ) # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
