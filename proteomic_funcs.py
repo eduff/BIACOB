@@ -174,10 +174,10 @@ def table_means_ext(df, show=[], groupby='Case', cols=[], rows=[], var_names=[],
     df_desc = df_desc_full.loc[idx[:],idx[:,["mean", "std"]]].T
     df_desc.loc[idx[:,["mean"]],idx[:]] = df_desc.loc[idx[:,["mean"]],idx[:]
                                                ].applymap(
-                                               lambda x: "{:.2f}".format(x))
+                                               lambda x: "{:.3f}".format(x))
     df_desc.loc[idx[:,["std"]],idx[:]] = df_desc.loc[idx[:,["std"]],idx[:]
                                                ].applymap(
-                                               lambda x: " ("+"{:.2f}".format(x)+")")
+                                               lambda x: " ("+"{:.3f}".format(x)+")")
 
     df_desc.loc[idx[:,["mean"]],idx[:]] = df_desc.loc[idx[:,["mean"]],idx[:]].values+df_desc.loc[idx[:,["std"]],idx[:]].values
     df_desc=df_desc.loc[idx[:,["mean"]],idx[:]].droplevel(1)
@@ -532,7 +532,7 @@ def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars
 
 def model_plot(inputs, assays, model_name, var_show, alpha=0.05, plot=False):
 
-    output = pd.DataFrame(index=assays)
+    disease_output = pd.DataFrame(index=assays)
     
     for dis in assays:
         tmp = inputs[dis + model_name]
@@ -569,4 +569,71 @@ def model_plot(inputs, assays, model_name, var_show, alpha=0.05, plot=False):
 
 def checki(y):
     print(y)
+    
+
+
+def gauss_sm(x):
+    return(np.dot(norm.pdf(np.arange(len(x)),loc=5,scale=1),x))
+
+
+def time_plot(data,IDP,groupby='Case',rows=[],col_names=[],time='Age-3.0_d',rolling="1500d",ylim=[],xlim=[],grps=None,xlabel=[],ylabel=[],title=[],leg=True,ax=[],loc='upper right'):
+
+    if ax == []:
+        ax=plt.gca()
+
+    df=data.loc[els,[groupby,time,IDP]]
+    df=df.sort_values(by=time,ascending=True)
+    df=df.set_index(time)
+    dfg=df.groupby(groupby)
+
+    roll = dfg.rolling(rolling,min_periods=1,center=True) 
+
+    #mm = roll.median()
+    mm = roll.mean()
+    #mm = roll.apply(gauss_sm)
+    sem = roll.sem()
+    #std = roll.std()/np.sqrt(40)
+    qnt_l=roll.quantile(.1)
+    qnt_u=roll.quantile(.9)
+    
+    if grps is None:
+        grps=dfg.groups.keys()
+    
+    for key in grps:
+        if type(leg)==dict:
+            name=leg[key]
+        else:
+            name=key
+        if type(rolling)==str:
+            xs=mm.loc[(key,slice(None)),:].index.get_level_values(1)/ pd.to_timedelta(1, unit='D') /365 
+        else:
+            xs=mm.loc[(key,slice(None)),:].index.get_level_values(1)   
+   
+        df= mm.loc[(key,slice(None)),:]
+
+        sns.lineplot(x=xs[~df.index.duplicated()],y=IDP,data=df[~df.index.duplicated()],label=name,ax=ax)
+        plt.sca(ax)
+        plt.fill_between(xs,mm.loc[(key,slice(None)),IDP]-sem.loc[(key,slice(None)),IDP],mm.loc[(key,slice(None)),IDP]+sem.loc[(key,slice(None)),IDP],alpha=0.2)
+    
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    
+    if leg:
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles[:],labels[:],loc=loc)
+    else:
+        ax.get_legend().remove()
+        
+    if ylim:
+        ax.set_ylim(ylim)
+    if xlim:
+        ax.set_xlim(xlim)
+    if xlabel:
+        ax.set_xlabel(xlabel)
+    if ylabel:
+        ax.set_ylabel(ylabel)
+    if title:
+        ax.set_title(title)
+    return(ax)
+
 
