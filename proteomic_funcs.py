@@ -7,6 +7,7 @@ import numpy as np
 import pickle as pkl 
 import os,re
 import scipy
+import forestplot as fp
 scipy.__version__
 import matplotlib.pyplot as plt
 
@@ -517,12 +518,19 @@ def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars
     for col in range(len(vars_show)):
         for row in range(len(assays)):
             beta_txt= (' ' + '{0:.4f}'.format(betas[row,col]) ) # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
-            if (sigs[row,col]==1) :
-                table2.loc[rownames[row],colnames[col]]= (beta_txt+' (p=' + '{0:.3f}'.format(pvals[row,col]) + '**)') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
-            elif (pvals[row,col]<0.05):
-                table2.loc[rownames[row],colnames[col]]= (beta_txt+' (p=' + '{0:.3f}'.format(pvals[row,col]) + '*)') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
+            pvals_show=pvals[row,col]
+            
+            if (pvals_show < 0.001) :
+                pvals_show="{:.1e}".format(pvals_show)
             else:
-                table2.loc[rownames[row],colnames[col]]= (beta_txt+' (p=' + '{0:.3f})'.format(pvals[row,col]) + ' ') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
+                pvals_show="{0:.3f}".format(pvals_show)
+            
+            if (sigs[row,col]==1) :        
+                table2.loc[rownames[row],colnames[col]]= (beta_txt+' (p=' + pvals_show + '**)') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
+            elif (pvals[row,col]<0.05):
+                table2.loc[rownames[row],colnames[col]]= (beta_txt+' (p=' + pvals_show  + '*)') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
+            else:
+                table2.loc[rownames[row],colnames[col]]= (beta_txt+' (p=' + pvals_show  + ' ') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
                 
     
     if returndata:
@@ -581,7 +589,7 @@ def time_plot(data,IDP,groupby='Case',rows=[],col_names=[],time='Age-3.0_d',roll
     if ax == []:
         ax=plt.gca()
 
-    df=data.loc[els,[groupby,time,IDP]]
+    df=data.loc[:,[groupby,time,IDP]]
     df=df.sort_values(by=time,ascending=True)
     df=df.set_index(time)
     dfg=df.groupby(groupby)
@@ -636,4 +644,125 @@ def time_plot(data,IDP,groupby='Case',rows=[],col_names=[],time='Age-3.0_d',roll
         ax.set_title(title)
     return(ax)
 
+def calc_pre_post_models(data,all_matched,outpts,assays,data_ins=['simp'],models=['modpre'],inter_vars=[],a='post_cl',c='',ext='-3.0'):
+    ###
+    # calculate pre and post models for proteomics data
+    # outpts - output dictionary to add to
+    # assays - e.g.  SIMOA_assays+ OLINK_assays_final ['cog_vars_gi','adni_mean','GeneralHealth']: # diseases: # SIMOA_assays: # vars['park']:
+    # ext: suffix for data (0)
+    # data_in: data reduction: 'simp' normal, 'red' reduced, 'disease' under age 73, 'PCR' COVID confirmed
+    # model: model type: 'modpre' standard, 'modpre_ext' extended, 'modpre_APOE'  APOE type , 'modpre_GFR' GFR 
+    # inter_vars - vars to add to models for confound/interaction plots: e.g. 'adni_mean_diff_cl','cog_vars_gi_diff_cl','GeneralHealth_diff_cl'] + vars['pre_comorb']+ ['vac_prior_first_pos']:  #['hearing-2.0']: # ['vac_prior_first_pos'] vars['diseases_pre']:#vars['OLINK_pre']: # vars['pre_comorb']:
+    ###
+    
+    for b in assays:  # ['cog_vars_gi','adni_mean','GeneralHealth']: #+ OLINK_assays_final:  ['cog_vars_gi','adni_mean'] diseases:#  : # [-2:]:#+  ['cog_vars_gi','adni_mean']: #  + diseases SIMOA_assays + OLINK_assays + diseases +  SIMOA_assays  # ['Ab42','Ab40','Ab42/Ab40','GFAP','pTau-181','NfL']:
+        
+        for data_in in data_ins: # ['PCR']: #,'red']:# 'simp','disease'
+            print(b)
+            for model in models: # ['modpre','modpre_ext','modpre_APOE','modpre_GFR']: # 'modpre',#_riskfactors']:#,'modpre']: # 'modpre','modpre_ext',
+                IDP=b+"_"+c+a # " regPl_
+                IDP_pre=b+"_" +c+'pre_cl'#"cl" # " regPl_
+                IDP_diff=b+"_" +c+'diff_cl'
+                # matched data only (no missing for IDP)
+                els=all_matched
+                all_case=all_matched&(data.loc[:,'Case_bin']==1)
+                all_control=all_matched&(data.loc[:,'Case_bin']==0)
+                
+                # ensure that matched case and controls exist for IDP
+                matched=data.loc[:,IDP_diff].dropna().index
+                matched=data.loc[data.loc[matched,'matched_eid'].dropna().values,IDP_diff].notna()
+                ids=matched[matched].index
 
+                els=all_matched.copy()
+                els[:]=False
+                els[ids]=True 
+
+                ids=(all_case&els)
+                ids=ids[ids].index
+                ids2=(all_control&els)
+                ids2=ids2[ids2].index
+
+                idels=(ids==ids) #(np.abs((data.loc[ids,'Activity-3.0'].values-data.loc[ids2,'Activity-3.0'].values))<2000) #&  (data.loc[ids,'Smoking_bin-2.0'].values==data.loc[ids2,'Smoking_bin-2.0'].values) # & (data.loc[ids,'BP_meds'].values==data.loc[ids2,'BP_meds'].values) # (np.abs((data.loc[ids,'Hip/Waist-2.0'].values-data.loc[ids2,'Hip/Waist-2.0'].values))<20) #& 
+                els[:]=False
+
+                if data_in =='red':
+                    idels= idels&(np.abs(data.loc[ids,'APOE_score'].values-data.loc[ids2,'APOE_score'].values))<2
+                    #(data.loc[ids,'Diabetes'].values==data.loc[ids2,'Diabetes'].values) & (data.loc[ids,'BP_meds'].values==data.loc[ids2,'BP_meds'].values) & (np.abs((data.loc[ids,'Hip/Waist-2.0'].values-data.loc[ids2,'Hip/Waist-2.0'].values))<20) #& 
+                elif data_in == 'disease':
+                    # special case for OLINK disease risk models
+                    idels = idels & (data.loc[ids,'matched_age_mean']<73)
+                elif data_in == 'PCR':
+                    idels = idels & (data.loc[ids,'COVID']=='COVID') 
+                else:
+                    idels=(ids==ids)
+
+                els[ids[idels]]=True
+                els[ids2[idels]]=True  
+                
+                for age_f in ['','age_f_']: 
+                    base_model =  " Q('"+ IDP + "')   ~   Q('"+ IDP_pre + "') + Q('Age"+ext+"') + Q('22001-0.0')   + Q('assessment_sep')+ Q('assessment_sep^2')   "
+
+                    if model == 'modpre_ext':
+                        # base_model = base_model + "+ C(Q('APOE_score')) + C(Q('Smoking_bin-2.0')) + Q('Hip/Waist-2.0') + Q('4079-2.0') "
+                        #base_model = base_model + "+ C(Q('Diabetes'))+ C(Q('Smoking_bin-2.0')) + C(Q('BP_meds'))+ Q('21002-2.0') + Q('hypertension')+Q('709-3.0')+C(KeyWorker) + C(Q('APOE_score')) "
+                        base_model = base_model + "+ Q('21002-2.0') + Q('Activity-2.0')+Q('709-3.0')+C(KeyWorker)  "
+
+                    if model == 'modpre_APOE':
+                        # base_model = base_model + "+ C(Q('APOE_score')) + C(Q('Smoking_bin-2.0')) + Q('Hip/Waist-2.0') + Q('4079-2.0') "
+                        #base_model = base_model + "+ C(Q('APOE')) +  C(Q('Smoking_bin"+ext+"'))"
+                        base_model = base_model + "+ (Q('A33vA34')) + (Q('A33vA44')) +(Q('A33vA32')) +  Q('Hip/Waist-2.0') +  C(Q('Diabetes2')) + Q('GeneralHealth-2.0') +  C(Q('Smoking_bin"+ext+"'))"
+
+                    if model == 'modpre_riskfactors':
+                        # base_model = base_model + "+ C(Q('APOE_score')) + C(Q('Smoking_bin-2.0')) + Q('Hip/Waist-2.0') + Q('4079-2.0') "
+                        base_model = base_model + "+  Q('Hip/Waist-2.0') +  C(Q('Diabetes2'))"
+
+                    if model == 'modpre_GFR':
+                        # base_model = base_model + "+ C(Q('APOE_score')) + C(Q('Smoking_bin-2.0')) + Q('Hip/Waist-2.0') + Q('4079-2.0') "
+                        base_model = base_model + "+  Q('GFR_Cys_pre_cl') "            
+
+                    if age_f == '':
+                        case_var="Case_bin"
+                        case_var_hosp=" (Case_hosp_bin_only)  + (Case_nohosp_bin_only) "
+                    else:
+                        base_model=base_model.replace('Age'+'-3.0','Age-3.0_f')
+                        case_var="Case_bin*Q('Age-3.0_f')"
+                        case_var_hosp=" (Case_hosp_bin_only)*Q('Age-3.0_f')  + (Case_nohosp_bin_only)*Q('Age-3.0_f') "
+                    
+                    
+                    if model=='modpre':
+                        # sensitivity analyses for comorbidities
+                        
+                        for inter in inter_vars:#  
+                            if data[inter].dtype==bool :
+                                final_model=base_model + " +  C(Q('" + inter + "'))*"+case_var
+                                #query_var = "C(Q('" + inter + "'))[T.True]"
+                                final_model_conf=base_model + " +  C(Q('" + inter + "')) + "+case_var
+
+                                #query_var_conf = "C(Q('" + inter + "'))[T.True]"
+                            else:
+                                # remove age when assessing age-related-vulnerability
+                                if (inter[-2:]=='_f') & (age_f==''): 
+                                    final_model=base_model.replace('Age'+ext,inter)
+                                    final_model = final_model + " +  Q('" + inter + "'):"+case_var+ " +  "+case_var
+                                    final_model_conf = final_model + " +  "+case_var
+                                    
+                                    #query_var = "Q('" + inter + "')"
+                                    #final_model_conf=base_model + " +  Q('" + inter + "') + "+case_var                               
+                                else:    
+                                    final_model=base_model + " +  Q('" + inter + "')*"+case_var
+                                    #query_var = "Q('" + inter + "')"
+                                    final_model_conf=base_model + " +  Q('" + inter + "') + "+case_var
+                                    #query_var_conf = "Q('" + inter + "')"
+                            
+                            #print([IDP+'_'+inter +'_int_'+age_f+data_in + '_' + model])
+                            outpts[IDP+'_'+inter +'_int_'+age_f+data_in + '_' + model]=  ols_simp(formula=final_model,data=data[els],pre=IDP_pre).fit() # +  Q('"+bbd['gSex']+"')++ C(PlateID_"+a+")
+                            outpts[IDP+'_'+inter +'_conf_'+age_f+data_in + '_' + model]=  ols_simp(formula=final_model_conf,data=data[els],pre=IDP_pre).fit() # +  Q('"+bbd['gSex']+"')++ C(PlateID_"+a+")
+                            
+
+                    outpts[IDP+'_'+age_f+data_in + '_' + model]=ols_simp(formula=base_model + " + " + case_var ,data=data[els],pre=IDP_pre).fit() # +  Q('"+bbd['gSex']+"')++ C(PlateID_"+a+")
+                    outpts[IDP+'_'+age_f+data_in + '_' + model +'_hosp_only']=ols_simp(formula=base_model  + " + " + case_var_hosp ,data=data[els],pre=IDP_pre,case='Case_hosp_bin_only').fit()
+                    outpts[IDP+'_'+age_f+data_in + '_' + model +'_basxtime']=ols_simp(formula= base_model +  " + Case_bin +  Q('"+ IDP_pre + "')*Q('assessment_sep')" ,data=data[els],pre=IDP_pre).fit()
+                
+                outpts[IDP+'_simp_modpre_f']=ols_simp(formula="   Q('"+ IDP + "')   ~   Case_bin*Q('Age-3.0_f')  + Q('assessment_sep')+ Q('assessment_sep^2') +  Q('22001-0.0') +  Q('"+ IDP_pre + "')    ", data=data[els],pre=IDP_pre).fit() # +  Q('"+bbd['gSex']+"')++ C(PlateID_"+a+")
+                
+    return outpts
