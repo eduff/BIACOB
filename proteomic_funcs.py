@@ -10,6 +10,7 @@ import scipy
 import forestplot as fp
 scipy.__version__
 import matplotlib.pyplot as plt
+from pandas.tseries.offsets import DateOffset
 
 import scipy.stats as stats
 import sklearn
@@ -644,9 +645,22 @@ def time_plot(data,IDP,groupby='Case',rows=[],col_names=[],time='Age-3.0_d',roll
         ax.set_title(title)
     return(ax)
 
-def calc_pre_post_models(data,all_matched,outpts,assays,data_ins=['simp'],models=['modpre'],inter_vars=[],a='post_cl',c='',ext='-3.0'):
+# Function to calculate primary pre->post prediction models for proteomics data.
+
+def calc_pre_post_models(data,els,outpts,assays,data_ins=['simp'],models=['modpre'],inter_vars=[],a='post_cl',c='',ext='-3.0'):
     ###
-    # calculate pre and post models for proteomics data
+    # Parameters:
+    # data (DataFrame): The input data containing proteomics measurements.
+    # els : elements of dataframe for analysis
+    # outpts (dict): Output dictionary to add results to.
+    # assays (list): List of assays to be analyzed, e.g., ['cog_vars_gi', 'adni_mean', 'GeneralHealth'].
+    # data_ins (list, optional): List of data reduction methods, default is ['simp'].
+    # models (list, optional): List of model types, default is ['modpre'].
+    # inter_vars (list, optional): List of variables to add to models for confound/interaction plots.
+    # a (str, optional): Suffix for post data, default is 'post_cl'.
+    # c (str, optional): Additional suffix, default is ''.
+    # ext (str, optional): Suffix for data, default is '-3.0'.
+    # # calculate pre and post models for proteomics data
     # outpts - output dictionary to add to
     # assays - e.g.  SIMOA_assays+ OLINK_assays_final ['cog_vars_gi','adni_mean','GeneralHealth']: # diseases: # SIMOA_assays: # vars['park']:
     # ext: suffix for data (0)
@@ -664,16 +678,15 @@ def calc_pre_post_models(data,all_matched,outpts,assays,data_ins=['simp'],models
                 IDP_pre=b+"_" +c+'pre_cl'#"cl" # " regPl_
                 IDP_diff=b+"_" +c+'diff_cl'
                 # matched data only (no missing for IDP)
-                els=all_matched
-                all_case=all_matched&(data.loc[:,'Case_bin']==1)
-                all_control=all_matched&(data.loc[:,'Case_bin']==0)
+                els=els.copy()
+                all_case=els&(data.loc[:,'Case_bin']==1)
+                all_control=els&(data.loc[:,'Case_bin']==0)
                 
                 # ensure that matched case and controls exist for IDP
                 matched=data.loc[:,IDP_diff].dropna().index
                 matched=data.loc[data.loc[matched,'matched_eid'].dropna().values,IDP_diff].notna()
                 ids=matched[matched].index
 
-                els=all_matched.copy()
                 els[:]=False
                 els[ids]=True 
 
@@ -687,7 +700,6 @@ def calc_pre_post_models(data,all_matched,outpts,assays,data_ins=['simp'],models
 
                 if data_in =='red':
                     idels= idels&(np.abs(data.loc[ids,'APOE_score'].values-data.loc[ids2,'APOE_score'].values))<2
-                    #(data.loc[ids,'Diabetes'].values==data.loc[ids2,'Diabetes'].values) & (data.loc[ids,'BP_meds'].values==data.loc[ids2,'BP_meds'].values) & (np.abs((data.loc[ids,'Hip/Waist-2.0'].values-data.loc[ids2,'Hip/Waist-2.0'].values))<20) #& 
                 elif data_in == 'disease':
                     # special case for OLINK disease risk models
                     idels = idels & (data.loc[ids,'matched_age_mean']<73)
@@ -703,21 +715,15 @@ def calc_pre_post_models(data,all_matched,outpts,assays,data_ins=['simp'],models
                     base_model =  " Q('"+ IDP + "')   ~   Q('"+ IDP_pre + "') + Q('Age"+ext+"') + Q('22001-0.0')   + Q('assessment_sep')+ Q('assessment_sep^2')   "
 
                     if model == 'modpre_ext':
-                        # base_model = base_model + "+ C(Q('APOE_score')) + C(Q('Smoking_bin-2.0')) + Q('Hip/Waist-2.0') + Q('4079-2.0') "
-                        #base_model = base_model + "+ C(Q('Diabetes'))+ C(Q('Smoking_bin-2.0')) + C(Q('BP_meds'))+ Q('21002-2.0') + Q('hypertension')+Q('709-3.0')+C(KeyWorker) + C(Q('APOE_score')) "
                         base_model = base_model + "+ Q('21002-2.0') + Q('Activity-2.0')+Q('709-3.0')+C(KeyWorker)  "
 
                     if model == 'modpre_APOE':
-                        # base_model = base_model + "+ C(Q('APOE_score')) + C(Q('Smoking_bin-2.0')) + Q('Hip/Waist-2.0') + Q('4079-2.0') "
-                        #base_model = base_model + "+ C(Q('APOE')) +  C(Q('Smoking_bin"+ext+"'))"
                         base_model = base_model + "+ (Q('A33vA34')) + (Q('A33vA44')) +(Q('A33vA32')) +  Q('Hip/Waist-2.0') +  C(Q('Diabetes2')) + Q('GeneralHealth-2.0') +  C(Q('Smoking_bin"+ext+"'))"
 
                     if model == 'modpre_riskfactors':
-                        # base_model = base_model + "+ C(Q('APOE_score')) + C(Q('Smoking_bin-2.0')) + Q('Hip/Waist-2.0') + Q('4079-2.0') "
                         base_model = base_model + "+  Q('Hip/Waist-2.0') +  C(Q('Diabetes2'))"
 
                     if model == 'modpre_GFR':
-                        # base_model = base_model + "+ C(Q('APOE_score')) + C(Q('Smoking_bin-2.0')) + Q('Hip/Waist-2.0') + Q('4079-2.0') "
                         base_model = base_model + "+  Q('GFR_Cys_pre_cl') "            
 
                     if age_f == '':
@@ -728,7 +734,7 @@ def calc_pre_post_models(data,all_matched,outpts,assays,data_ins=['simp'],models
                         case_var="Case_bin*Q('Age-3.0_f')"
                         case_var_hosp=" (Case_hosp_bin_only)*Q('Age-3.0_f')  + (Case_nohosp_bin_only)*Q('Age-3.0_f') "
                     
-                    
+          
                     if model=='modpre':
                         # sensitivity analyses for comorbidities
                         
@@ -766,3 +772,55 @@ def calc_pre_post_models(data,all_matched,outpts,assays,data_ins=['simp'],models
                 outpts[IDP+'_simp_modpre_f']=ols_simp(formula="   Q('"+ IDP + "')   ~   Case_bin*Q('Age-3.0_f')  + Q('assessment_sep')+ Q('assessment_sep^2') +  Q('22001-0.0') +  Q('"+ IDP_pre + "')    ", data=data[els],pre=IDP_pre).fit() # +  Q('"+bbd['gSex']+"')++ C(PlateID_"+a+")
                 
     return outpts
+
+
+def plot_gp(data,IDP,els=[],els_ctr=[],ax=[],time='Age-3.0_d',input=[],scatterplot=False):
+    if len(els)==0:
+        els=~np.isnan(data[IDP]) & (data['Case']=='sars')
+        els_ctr=~np.isnan(data[IDP]) & (data['Case']=='ctr')
+    else:
+        els=els&data.loc[:,IDP].notnull()
+        
+    if len(ax)>0:
+        ax=plt.gca()
+        
+    sigma_f, l = data.loc[els,IDP].std()/np.sqrt(2), 1
+    sigma_f, l =  15,15
+    kernel = GPy.kern.RBF(1, sigma_f, l)
+    #print(data[time].dt.days.values[els,None]/365)
+    #print(data[time].dt.days.values[els,None]/365)
+    model = GPy.models.GPRegression(data[time].dt.days.values[els,None],data.loc[:,IDP].values[els,None],kernel) 
+   
+    if len(els_ctr)>0:
+        kernel = GPy.kern.RBF(1, sigma_f, l)
+        model_ctr = GPy.models.GPRegression(data[time].dt.days.values[els_ctr,None],data.loc[:,IDP].values[els_ctr,None],kernel) 
+
+    #ax=sns.scatterplot(data=data.loc[els,:],y=IDP,x='Age-3.0',hue='Case')
+    if len(input)==0:
+        input=np.zeros((30,1))
+        input[:,0]=np.arange(30)+50
+        
+    #input[:,1]=False
+    ax=plt.plot(input,model.predict(input)[0][:,0],color='red',label='COVID')
+    #input[:,1]=True
+    qnts=model.predict_quantiles(input,quantiles=[45,55])
+    plt.fill_between(input[:,0],qnts[0].flatten(),qnts[1].flatten(),color='red',alpha=0.2)
+    
+    #ax=sns.lineplot(x=np.arange(30)+50,y=model_ctr.predict(input)[0][:,0],color='blue',)
+    if len(els_ctr)>0:
+        ax=plt.plot(input,model_ctr.predict(input)[0][:,0],color='blue',label='Control')
+    #input[:,1]=True
+        qnts=model_ctr.predict_quantiles(input,quantiles=[45,55])
+        plt.fill_between(input[:,0],qnts[0].flatten(),qnts[1].flatten(),color='blue',alpha=0.2)
+
+    #ax.sns.f
+    #
+    ax=plt.gca()
+
+    ax.set_xlim([input.min(),input.max()])
+    #ax.set_ylim([1.6,3.8])
+    #ax.set_xlabel("Age")
+    ax.set_ylabel(IDP)
+    #plt.legend()
+    
+    return(ax,model)
