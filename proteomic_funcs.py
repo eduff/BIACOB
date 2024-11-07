@@ -531,7 +531,7 @@ def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars
             elif (pvals[row,col]<0.05):
                 table2.loc[rownames[row],colnames[col]]= (beta_txt+' (p=' + pvals_show  + '*)') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
             else:
-                table2.loc[rownames[row],colnames[col]]= (beta_txt+' (p=' + pvals_show  + ' ') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
+                table2.loc[rownames[row],colnames[col]]= (beta_txt+' (p=' + pvals_show  + ')') # '{0:.2f}'.format(outpts_flat[a].params[rowvars[b]]) +
                 
     
     if returndata:
@@ -647,7 +647,7 @@ def time_plot(data,IDP,groupby='Case',rows=[],col_names=[],time='Age-3.0_d',roll
 
 # Function to calculate primary pre->post prediction models for proteomics data.
 
-def calc_pre_post_models(data,els,outpts,assays,data_ins=['simp'],models=['modpre'],inter_vars=[],a='post_cl',c='',ext='-3.0'):
+def calc_pre_post_models(data,els_in,outpts,assays,data_ins=['simp'],models=['modpre'],inter_vars=[],a='post_cl',c='',ext='-3.0'):
     ###
     # Parameters:
     # data (DataFrame): The input data containing proteomics measurements.
@@ -678,7 +678,7 @@ def calc_pre_post_models(data,els,outpts,assays,data_ins=['simp'],models=['modpr
                 IDP_pre=b+"_" +c+'pre_cl'#"cl" # " regPl_
                 IDP_diff=b+"_" +c+'diff_cl'
                 # matched data only (no missing for IDP)
-                els=els.copy()
+                els=els_in.copy()
                 all_case=els&(data.loc[:,'Case_bin']==1)
                 all_control=els&(data.loc[:,'Case_bin']==0)
                 
@@ -686,12 +686,13 @@ def calc_pre_post_models(data,els,outpts,assays,data_ins=['simp'],models=['modpr
                 matched=data.loc[:,IDP_diff].dropna().index
                 matched=data.loc[data.loc[matched,'matched_eid'].dropna().values,IDP_diff].notna()
                 ids=matched[matched].index
-
+                
                 els[:]=False
                 els[ids]=True 
 
                 ids=(all_case&els)
                 ids=ids[ids].index
+                
                 ids2=(all_control&els)
                 ids2=ids2[ids2].index
 
@@ -707,6 +708,7 @@ def calc_pre_post_models(data,els,outpts,assays,data_ins=['simp'],models=['modpr
                     idels = idels & (data.loc[ids,'COVID']=='COVID') 
                 else:
                     idels=(ids==ids)
+
 
                 els[ids[idels]]=True
                 els[ids2[idels]]=True  
