@@ -491,7 +491,7 @@ def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars
             resultstable.loc[rownames[row],'ci_u_norm']=(outputs[name].conf_int_norm.iloc[indices[0],1])
             pvals[row,col]=(outputs[name].pvalues[indices[0]])
             
-            # check if 1-sided
+            # check if 1-sided 
             
             if (beta_dirs[row]*beta_vars[col])==(np.sign(betas[row,col])):
                 pvals[row,col]=pvals[row,col]/2
@@ -585,7 +585,7 @@ def gauss_sm(x):
     return(np.dot(norm.pdf(np.arange(len(x)),loc=5,scale=1),x))
 
 
-def time_plot(data,IDP,groupby='Case',rows=[],col_names=[],time='Age-3.0_d',rolling="1500d",ylim=[],xlim=[],grps=None,xlabel=[],ylabel=[],title=[],leg=True,ax=[],loc='upper right'):
+def time_plot(data,IDP,groupby='Case',rows=[],col_names=[],time='Age-3.0_d',rolling="1500d",ylim=[],xlim=[],grps=None,xlabel=[],ylabel=[],title=[],leg=True,legendtitle=[],ax=[],loc='upper right'):
 
     if ax == []:
         ax=plt.gca()
@@ -629,7 +629,7 @@ def time_plot(data,IDP,groupby='Case',rows=[],col_names=[],time='Age-3.0_d',roll
     
     if leg:
         handles, labels = ax.get_legend_handles_labels()
-        ax.legend(handles[:],labels[:],loc=loc)
+        ax.legend(handles[:],labels[:],title=legendtitle,loc=loc)
     else:
         ax.get_legend().remove()
         
@@ -644,6 +644,92 @@ def time_plot(data,IDP,groupby='Case',rows=[],col_names=[],time='Age-3.0_d',roll
     if title:
         ax.set_title(title)
     return(ax)
+
+# Function to caclulate baseline models for proteomics data
+
+# calculate baseline models of assay associations, using basic model to remove confounds of Age, Sex
+# 
+
+def calc_pre_models(data,els_in,outpts_pre,assays,inter_vars,data_ins=['simp'],ext='-2.0'):
+
+    for b in assays: # SIMOA_assays + diseases +   OLINK_assays_final + ['P_CA9', 'P_ATP5IF1']: #
+    
+        print(b)
+        vvs=  inter_vars#  vars['pre_comorb'] #vvs=vars['dev_pre'] #vvs= vars['PRS'] #vvs= vars['diseases_pre'] \\
+            #vvs=vars['AD_variants'] #vvs=vars['new'] #vvs=['Activity-2.0']
+        if (ext=='-2.0'):
+            
+            IDP=b+'_pre_cl'
+
+        elif  (ext=='-3.0'):
+            
+            IDP=b+'_post_cl'
+            
+        elif  (ext=='_diff'):
+            
+            IDP=b+'_diff_cl'
+            
+        IDP_pre=b+'_pre_cl'
+        IDP_post=b+'_post_cl'
+        IDP_diff=b+'_diff_cl'
+        
+        for a in ['Case_bin']+vvs: # vars['OLINK_pre']: #:# vars['OLINK_pre']:#  ['Case_bin']+vvs : #vvs:#+ vars['pre']:# ['Case_bin']: # vvs: #,'Age-2.0_f']: # vars['OLINK_pre']:#   vars['OLINK_pre']:
+            
+            for data_in in data_ins: # ['case','ctr']: #'simp','red']:
+                els=els_in
+                # ensure that matched case and controls exist for IDP
+                
+                matched=data.loc[:,IDP_diff].dropna().index
+                matched=data.loc[data.loc[matched,'matched_eid'].dropna().values,IDP_diff].notna()
+                ids=matched[matched].index
+
+                els=els_in.copy()
+                els[:]=False
+                els[ids]=True 
+                
+                if data_in == 'case':
+                    els=els&all_case
+                if data_in == 'ctr':
+                    els=els&all_control
+
+                base_model =  " Q('"+ IDP + "')   ~  Q('Age"+ext+"')  +Q('22001-0.0') " #++ Q('GFR_Cys_pre_cl')"  + Q('assessment_sep')+ Q('assessment_sep^2')  "
+                
+                if (a!='31-0.0') & (a[:3]!='Age'):
+                    if (data[a].dtype==bool)   :
+                        base_model=base_model + " +  C(Q('" + a + "'))"
+                    else:  
+                        base_model=base_model + " +  Q('" + a + "')"
+                        
+                if (a=='Age-2.0_f') |  (a=='Age-3.0_f'):   
+                    base_model =  " Q('"+ IDP + "')   ~   Q('" + a + "') +Q('22001-0.0')   "
+                    
+                ext_model = base_model + "+ C(Q('APOE')) + C(Q('BP_meds')) + C(Q('hypertension')) + C(Q('Diabetes')) + C(Q('Smoking_bin-2.0')) + Q('Hip/Waist-2.0') + Q('4079-2.0') "
+                ext_model2 = base_model + "+ C(Q('BP_meds'))  + C(Q('Diabetes')) + Q('Hip/Waist-2.0') + Q('4079-2.0') "
+                ext_model3 = base_model + "+ C(Q('BP_meds')) + C(Q('hypertension')) + C(Q('Diabetes'))  "
+                ext_model2 = base_model + "+ C(Q('Diabetes'))+ C(Q('Smoking_bin-2.0')) + C(Q('BP_meds'))+ Q('Hip/Waist-2.0') + Q('hypertension')+C(KeyWorker) + Q('APOE_score') "
+                
+                if (a=='APOE_score') :
+                    APOE_model = base_model + "+ C(Q('Smoking_bin"+ext+"'))   "
+                else:  
+                    APOE_model = base_model + "+ C(Q('APOE')) + C(Q('Smoking_bin"+ext+"'))   "
+
+                if data[a].dtype==bool :
+                    query_var = "C(Q('" + a + "'))[T.True]"
+                else:
+                    query_var = "Q('" + a + "')"
+
+                outpts_pre[IDP+'_'+a +'_'+data_in]=ols_simp(formula=base_model, data=data[els],pre=IDP,case=query_var ).fit() 
+                outpts_pre[IDP+'_'+a +'_'+data_in+'_APOE']=ols_simp(formula=APOE_model, data=data[els],pre=IDP,case=query_var ).fit() 
+                
+                outpts_pre[IDP+'_'+a +'_'+data_in+'_ext']=ols_simp(formula=ext_model, data=data[els],pre=IDP,case=query_var ).fit() 
+                outpts_pre[IDP+'_'+a +'_'+data_in+'_ext3']=ols_simp(formula=ext_model3, data=data[els],pre=IDP,case=query_var ).fit() 
+            
+        base_model =  " Q('"+ IDP + "')   ~  Q('Age"+ext+"')  +Q('31-0.0')  "
+        ext_model2 = base_model + "+ C(Q('Diabetes'))+ C(Q('Smoking_bin-2.0')) + C(Q('BP_meds'))+ Q('Hip/Waist-2.0') + Q('hypertension')+C(KeyWorker) +Case_bin "
+
+        outpts_pre[IDP+'_ext2_'+data_in]=ols_simp(formula=ext_model2, data=data[els],pre=IDP,case='Case_bin' ).fit() 
+        
+    return(outpts_pre)
 
 # Function to calculate primary pre->post prediction models for proteomics data.
 
@@ -775,6 +861,7 @@ def calc_pre_post_models(data,els_in,outpts,assays,data_ins=['simp'],models=['mo
                 
     return outpts
 
+# unused plot functino
 
 def plot_gp(data,IDP,els=[],els_ctr=[],ax=[],time='Age-3.0_d',input=[],scatterplot=False):
     if len(els)==0:
