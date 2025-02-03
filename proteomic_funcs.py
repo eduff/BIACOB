@@ -104,6 +104,7 @@ def find_vars(data,var):
     #return [s for s in data.columns if var in s]
     return [s for s in data.columns if re.search(var,s)]
 
+# generate a neat table of means and stds
 
 def table_means_ext(df, show=[], groupby='Case', cols=[], rows=[], var_names=[], statkeys=['sars']):
     """
@@ -219,6 +220,7 @@ def table_means_ext(df, show=[], groupby='Case', cols=[], rows=[], var_names=[],
     return df_desc#, df_desc_full
 
 # remove outliers from data 
+
 def remove_outliers(data, mult=8, repl=np.nan, axis=0, demean=False, pos=False, log=False):
     """
     Remove outliers from a dataset.
@@ -394,7 +396,8 @@ def sizeof_fmt(num, suffix='B'):
         num /= 1024.0
     return "%.1f %s%s" % (num, 'Yi', suffix)
 
-# print a full table
+# print a full table of modelling results
+
 def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars=[], rownames=[], colnames=[], diff_models=False, FPR='row', alpha=0.05, rem_txt=-6, returndata=False,beta_name_add='',beta_name_only=[],show_norms=True):
     """
     Generate a table of model results for proteomics data.
@@ -539,6 +542,9 @@ def model_table(outputs, assays, model_names, vars_show, beta_dirs=[], beta_vars
     else:
         return(table2)
 
+
+# plot a model results
+
 def model_plot(inputs, assays, model_name, var_show, alpha=0.05, plot=False):
 
     disease_output = pd.DataFrame(index=assays)
@@ -585,6 +591,7 @@ def gauss_sm(x):
     return(np.dot(norm.pdf(np.arange(len(x)),loc=5,scale=1),x))
 
 
+# 
 def time_plot(data,IDP,groupby='Case',rows=[],col_names=[],time='Age-3.0_d',rolling="1500d",ylim=[],xlim=[],grps=None,xlabel=[],ylabel=[],title=[],leg=True,legendtitle=[],ax=[],loc='upper right'):
 
     if ax == []:
@@ -597,11 +604,11 @@ def time_plot(data,IDP,groupby='Case',rows=[],col_names=[],time='Age-3.0_d',roll
 
     roll = dfg.rolling(rolling,min_periods=1,center=True) 
 
-    #mm = roll.median()
+    
     mm = roll.mean()
-    #mm = roll.apply(gauss_sm)
+    
     sem = roll.sem()
-    #std = roll.std()/np.sqrt(40)
+    
     qnt_l=roll.quantile(.1)
     qnt_u=roll.quantile(.9)
     
@@ -650,8 +657,22 @@ def time_plot(data,IDP,groupby='Case',rows=[],col_names=[],time='Age-3.0_d',roll
 # calculate baseline models of assay associations, using basic model to remove confounds of Age, Sex
 # 
 
-def calc_pre_models(data,els_in,outpts_pre,assays,inter_vars,data_ins=['simp'],ext='-2.0'):
+def calc_pre_models(data, els_in, outpts_pre, assays, inter_vars, data_ins=['simp'], ext='-2.0'):
+    """
+    Calculate baseline models of assay associations, using basic model to remove confounds of Age, Sex.
 
+    Parameters:
+    data (DataFrame): The input data containing the assays and other variables.
+    els_in (Series): A boolean series indicating the elements to be included in the analysis.
+    outpts_pre (dict): A dictionary to store the results of the pre-model calculations.
+    assays (list): A list of assay names to be included in the models.
+    inter_vars (list): A list of interaction variables to be included in the models.
+    data_ins (list): A list of data instances to be used in the models. Default is ['simp'].
+    ext (str): An extension string to be added to the model names. Default is '-2.0'.
+
+    Returns:
+    dict: A dictionary containing the results of the pre-model calculations.
+    """
     for b in assays: # SIMOA_assays + diseases +   OLINK_assays_final + ['P_CA9', 'P_ATP5IF1']: #
     
         print(b)
@@ -704,10 +725,7 @@ def calc_pre_models(data,els_in,outpts_pre,assays,inter_vars,data_ins=['simp'],e
                     base_model =  " Q('"+ IDP + "')   ~   Q('" + a + "') +Q('22001-0.0')   "
                     
                 ext_model = base_model + "+ C(Q('APOE')) + C(Q('BP_meds')) + C(Q('hypertension')) + C(Q('Diabetes')) + C(Q('Smoking_bin-2.0')) + Q('Hip/Waist-2.0') + Q('4079-2.0') "
-                ext_model2 = base_model + "+ C(Q('BP_meds'))  + C(Q('Diabetes')) + Q('Hip/Waist-2.0') + Q('4079-2.0') "
-                ext_model3 = base_model + "+ C(Q('BP_meds')) + C(Q('hypertension')) + C(Q('Diabetes'))  "
-                ext_model2 = base_model + "+ C(Q('Diabetes'))+ C(Q('Smoking_bin-2.0')) + C(Q('BP_meds'))+ Q('Hip/Waist-2.0') + Q('hypertension')+C(KeyWorker) + Q('APOE_score') "
-                
+
                 if (a=='APOE_score') :
                     APOE_model = base_model + "+ C(Q('Smoking_bin"+ext+"'))   "
                 else:  
@@ -722,13 +740,9 @@ def calc_pre_models(data,els_in,outpts_pre,assays,inter_vars,data_ins=['simp'],e
                 outpts_pre[IDP+'_'+a +'_'+data_in+'_APOE']=ols_simp(formula=APOE_model, data=data[els],pre=IDP,case=query_var ).fit() 
                 
                 outpts_pre[IDP+'_'+a +'_'+data_in+'_ext']=ols_simp(formula=ext_model, data=data[els],pre=IDP,case=query_var ).fit() 
-                outpts_pre[IDP+'_'+a +'_'+data_in+'_ext3']=ols_simp(formula=ext_model3, data=data[els],pre=IDP,case=query_var ).fit() 
-            
+               
         base_model =  " Q('"+ IDP + "')   ~  Q('Age"+ext+"')  +Q('31-0.0')  "
-        ext_model2 = base_model + "+ C(Q('Diabetes'))+ C(Q('Smoking_bin-2.0')) + C(Q('BP_meds'))+ Q('Hip/Waist-2.0') + Q('hypertension')+C(KeyWorker) +Case_bin "
-
-        outpts_pre[IDP+'_ext2_'+data_in]=ols_simp(formula=ext_model2, data=data[els],pre=IDP,case='Case_bin' ).fit() 
-        
+         
     return(outpts_pre)
 
 # Function to calculate primary pre->post prediction models for proteomics data.
@@ -763,6 +777,7 @@ def calc_pre_post_models(data,els_in,outpts,assays,data_ins=['simp'],models=['mo
                 IDP=b+"_"+c+a # " regPl_
                 IDP_pre=b+"_" +c+'pre_cl'#"cl" # " regPl_
                 IDP_diff=b+"_" +c+'diff_cl'
+                
                 # matched data only (no missing for IDP)
                 els=els_in.copy()
                 all_case=els&(data.loc[:,'Case_bin']==1)
@@ -782,7 +797,7 @@ def calc_pre_post_models(data,els_in,outpts,assays,data_ins=['simp'],models=['mo
                 ids2=(all_control&els)
                 ids2=ids2[ids2].index
 
-                idels=(ids==ids) #(np.abs((data.loc[ids,'Activity-3.0'].values-data.loc[ids2,'Activity-3.0'].values))<2000) #&  (data.loc[ids,'Smoking_bin-2.0'].values==data.loc[ids2,'Smoking_bin-2.0'].values) # & (data.loc[ids,'BP_meds'].values==data.loc[ids2,'BP_meds'].values) # (np.abs((data.loc[ids,'Hip/Waist-2.0'].values-data.loc[ids2,'Hip/Waist-2.0'].values))<20) #& 
+                idels=(ids==ids)  
                 els[:]=False
 
                 if data_in =='red':
@@ -839,29 +854,26 @@ def calc_pre_post_models(data,els_in,outpts,assays,data_ins=['simp'],models=['mo
                                     final_model=base_model.replace('Age'+ext,inter)
                                     final_model = final_model + " +  Q('" + inter + "'):"+case_var+ " +  "+case_var
                                     final_model_conf = final_model + " +  "+case_var
-                                    
-                                    #query_var = "Q('" + inter + "')"
-                                    #final_model_conf=base_model + " +  Q('" + inter + "') + "+case_var                               
+                                                                  
                                 else:    
                                     final_model=base_model + " +  Q('" + inter + "')*"+case_var
                                     #query_var = "Q('" + inter + "')"
                                     final_model_conf=base_model + " +  Q('" + inter + "') + "+case_var
                                     #query_var_conf = "Q('" + inter + "')"
                             
-                            #print([IDP+'_'+inter +'_int_'+age_f+data_in + '_' + model])
+                            
                             outpts[IDP+'_'+inter +'_int_'+age_f+data_in + '_' + model]=  ols_simp(formula=final_model,data=data[els],pre=IDP_pre).fit() # +  Q('"+bbd['gSex']+"')++ C(PlateID_"+a+")
                             outpts[IDP+'_'+inter +'_conf_'+age_f+data_in + '_' + model]=  ols_simp(formula=final_model_conf,data=data[els],pre=IDP_pre).fit() # +  Q('"+bbd['gSex']+"')++ C(PlateID_"+a+")
                             
-
                     outpts[IDP+'_'+age_f+data_in + '_' + model]=ols_simp(formula=base_model + " + " + case_var ,data=data[els],pre=IDP_pre).fit() # +  Q('"+bbd['gSex']+"')++ C(PlateID_"+a+")
                     outpts[IDP+'_'+age_f+data_in + '_' + model +'_hosp_only']=ols_simp(formula=base_model  + " + " + case_var_hosp ,data=data[els],pre=IDP_pre,case='Case_hosp_bin_only').fit()
-                    outpts[IDP+'_'+age_f+data_in + '_' + model +'_basxtime']=ols_simp(formula= base_model +  " + Case_bin +  Q('"+ IDP_pre + "')*Q('assessment_sep')" ,data=data[els],pre=IDP_pre).fit()
+                    #outpts[IDP+'_'+age_f+data_in + '_' + model +'_basxtime']=ols_simp(formula= base_model +  " + Case_bin +  Q('"+ IDP_pre + "')*Q('assessment_sep')" ,data=data[els],pre=IDP_pre).fit()
                 
                 outpts[IDP+'_simp_modpre_f']=ols_simp(formula="   Q('"+ IDP + "')   ~   Case_bin*Q('Age-3.0_f')  + Q('assessment_sep')+ Q('assessment_sep^2') +  Q('22001-0.0') +  Q('"+ IDP_pre + "')    ", data=data[els],pre=IDP_pre).fit() # +  Q('"+bbd['gSex']+"')++ C(PlateID_"+a+")
                 
     return outpts
 
-# unused plot functino
+# unused plot function
 
 def plot_gp(data,IDP,els=[],els_ctr=[],ax=[],time='Age-3.0_d',input=[],scatterplot=False):
     if len(els)==0:
@@ -876,8 +888,7 @@ def plot_gp(data,IDP,els=[],els_ctr=[],ax=[],time='Age-3.0_d',input=[],scatterpl
     sigma_f, l = data.loc[els,IDP].std()/np.sqrt(2), 1
     sigma_f, l =  15,15
     kernel = GPy.kern.RBF(1, sigma_f, l)
-    #print(data[time].dt.days.values[els,None]/365)
-    #print(data[time].dt.days.values[els,None]/365)
+ 
     model = GPy.models.GPRegression(data[time].dt.days.values[els,None],data.loc[:,IDP].values[els,None],kernel) 
    
     if len(els_ctr)>0:
@@ -913,3 +924,85 @@ def plot_gp(data,IDP,els=[],els_ctr=[],ax=[],time='Age-3.0_d',input=[],scatterpl
     #plt.legend()
     
     return(ax,model)
+
+
+# Plot time courses
+
+def all_plt(IDP,label,smth="3650d",loc="upper left",leg=False,pre='_pre',cl='_cl',titles=False,savename=''):
+            
+    if pre=='-2.0':
+        post='-3.0'
+    else:
+        post='_post'
+        
+    #ax1=sns.scatterplot(data=data,x='Age-3.0',y=IDP,hue='Case',alpha=0.15,label='_nolabel_')#.loc[data['APOE']=='A3A4'
+    #ax.legend(title='SARS-CoV-2 effects on pTau-181',  labels=['Control', 'SARS'])
+
+    els=(data.loc[:,IDP+pre+cl].notnull())&all_matched & all_case
+    ids=data.loc[data.loc[els,'matched_eid'],IDP+pre+cl].dropna().index
+    ids2=data.loc[ids,'matched_eid']
+    els[:]=False
+    els[ids]=True
+    els[ids2]=True
+    fig,axs = plt.subplots(1,3)
+    fig.set_size_inches(18/1.5,5/1.5)
+    ax1=time_plot(data.loc[els,:],IDP+pre+cl,groupby='Case',grps=['ctr','sars'],time='Age-2.0_d',rolling=smth,xlim=[50,84],xlabel='Age',ylabel=label,title='pre-pandemic',ax=axs[0],loc=loc,leg=leg)#,leg={"ctr":"Control",'sars':'SARS-CoV-2','sars_hosp':"COVID-Hospitalised"})#,ylim=[-0.01,0])#,ylim=[-0.01,0.005],ax=axs[0])
+    ax1.set_xlabel('')
+    ylim1=ax1.get_ylim()
+    ax1.spines['top'].set_visible(False)
+    ax1.spines['right'].set_visible(False)
+
+    els=(data.loc[:,IDP+pre+cl].notnull())&all_matched & all_case
+    ids=data.loc[data.loc[els,'matched_eid'],IDP+post+cl].dropna().index
+    ids2=data.loc[ids,'matched_eid']
+    els[:]=False
+    els[ids]=True
+    els[ids2]=True
+
+
+    ax2=time_plot(data.loc[els,:],IDP+post+cl,groupby='Case',grps=['ctr','sars'],time='Age-3.0_d',rolling=smth,xlim=[50,84],xlabel='Age',ylabel=label,title='post-pandemic',ax=axs[1],loc=loc,leg=False)#,leg={"ctr":"Control",'sars':'SARS-CoV-2','sars_hosp':"COVID-Hospitalised"})#,ylim=[-0.01,0])#,ylim=[-0.01,0.005],ax=axs[1])
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.set_xlabel('Age')
+    ax2.set_ylabel('')
+    ylim2=ax2.get_ylim()
+    
+    ylim = [min(ylim1[0],ylim2[0]),max(ylim1[1],ylim2[1])]
+    ax1.set_ylim(ylim)
+    ax2.set_ylim(ylim)
+    
+    els=(data.loc[:,IDP+pre+cl].notnull())&all_matched & all_case
+    ids=data.loc[data.loc[els,'matched_eid'],IDP+'_diff'+cl].dropna().index
+    ids2=data.loc[ids,'matched_eid']
+    els[:]=False
+    els[ids]=True
+    els[ids2]=True
+    
+    ax=time_plot(data.loc[els,:],IDP+'_diff' + cl,groupby='Case',grps=['ctr','sars'],time='Age-3.0_d',rolling=smth,xlim=[50,84],xlabel='Age',ylabel=label,title='difference',ax=axs[2],loc=loc,leg=False)#,leg={"ctr":"Control",'sars':'SARS-CoV-2','sars_hosp':"COVID-Hospitalised"})#,ylim=[-0.01,0])#,ylim=[-0.01,0.005],ax=axs[1])
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False) 
+    ax.set_xlabel('')
+    ax.set_ylabel('')
+    if savename=='':
+        sanename=label
+        
+    fig.savefig(savename+'.svg',dpi=300, bbox_inches = "tight")
+    return(ax)
+
+
+def scatter_hist(x, y, ax, ax_histy):
+    # no labels
+    #ax_histx.tick_params(axis="x", labelbottom=False)
+    ax_histy.tick_params(axis="y", labelleft=False)
+
+    # the scatter plot:
+    #ax.scatter(x, y)
+
+    # now determine nice limits by hand:
+    binwidth = 0.0025
+    xymax = max(np.max(np.abs(x)), np.max(np.abs(y)))
+    lim = (int(xymax/binwidth) + 1) * binwidth
+
+    bins = np.arange(-lim, lim + binwidth, binwidth)
+    #ax_histx.hist(x, bins=bins)
+    ax_histy.hist(y, bins=bins, orientation='horizontal')
